@@ -48,7 +48,9 @@ class RouteOptimizationAPIView(APIView):
         # Decode route
         encoded_geometry = route_data["geometry"]
 
-        route_coords = polyline.decode(encoded_geometry)
+        # route_coords = polyline.decode(encoded_geometry)
+        decoded = polyline.decode(encoded_geometry)
+        route_coords = [(float(lat), float(lon))for lat, lon in decoded]
 
         # Nearby stations
         nearby_stations = find_nearby_stations(route_coords)

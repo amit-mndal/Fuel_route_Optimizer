@@ -1,7 +1,6 @@
 from geopy.distance import geodesic
 
-MAX_RANGE = 500
-SAFE_RANGE = 400
+SAFE_RANGE = 500
 MPG = 10
 
 
@@ -13,34 +12,37 @@ def optimize_fuel_stops(route_coords, stations):
 
     used_stations = set()
 
-    current_point = route_coords[0]
+    total_distance = 0
 
-    distance_since_last_stop = 0
+    previous_point = route_coords[0]
 
-    sampled_route = route_coords[::500]
+    sampled_route = route_coords[::10]
 
-    for next_point in sampled_route:
+    for point in sampled_route:
 
         segment_distance = geodesic(
-            current_point,
-            next_point
+            previous_point,
+            point
         ).miles
 
-        distance_since_last_stop += segment_distance
+        total_distance += segment_distance
 
-        # Refuel only near safe range
-        if distance_since_last_stop < SAFE_RANGE:
+        previous_point = point
 
-            current_point = next_point
+        # Need refuel every SAFE_RANGE miles
+        if total_distance < SAFE_RANGE:
             continue
 
-        reachable_stations = []
+        nearby = []
 
         for station in stations:
 
-            station_name = station["truckstop_name"]
+            station_id = (
+                station["truckstop_name"],
+                station["city"]
+            )
 
-            if station_name in used_stations:
+            if station_id in used_stations:
                 continue
 
             station_point = (
@@ -48,57 +50,56 @@ def optimize_fuel_stops(route_coords, stations):
                 station["longitude"]
             )
 
-            distance_to_station = geodesic(
-                next_point,
+            dist = geodesic(
+                point,
                 station_point
             ).miles
 
-            if distance_to_station <= 50:
+            if dist <= 150:
 
-                reachable_stations.append(station)
+                nearby.append(station)
 
-        if not reachable_stations:
+        if not nearby:
             continue
 
-        # Cheapest station nearby
-        cheapest_station = min(
-            reachable_stations,
+        cheapest = min(
+            nearby,
             key=lambda x: x["price"]
         )
 
-        used_stations.add(
-            cheapest_station["truckstop_name"]
-        )
+        gallons = SAFE_RANGE / MPG
 
-        gallons_needed = SAFE_RANGE / MPG
-
-        fuel_cost = gallons_needed * cheapest_station["price"]
-
-        total_cost += fuel_cost
+        fuel_cost = gallons * cheapest["price"]
 
         fuel_stops.append({
 
             "truckstop_name":
-                cheapest_station["truckstop_name"],
+                cheapest["truckstop_name"],
 
             "city":
-                cheapest_station["city"].strip(),
+                cheapest["city"],
 
             "state":
-                cheapest_station["state"],
+                cheapest["state"],
 
             "price_per_gallon":
-                round(cheapest_station["price"], 2),
+                round(cheapest["price"], 2),
 
             "gallons_purchased":
-                round(gallons_needed, 2),
+                round(gallons, 2),
 
             "estimated_fuel_cost":
                 round(fuel_cost, 2)
         })
 
-        distance_since_last_stop = 0
+        total_cost += fuel_cost
 
-        current_point = next_point
+        used_stations.add((
+            cheapest["truckstop_name"],
+            cheapest["city"]
+        ))
+
+        # RESET AFTER REFUEL
+        total_distance = 0
 
     return fuel_stops, round(total_cost, 2)
